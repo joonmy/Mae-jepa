@@ -111,15 +111,22 @@ class MAE_Decoder(torch.nn.Module):
         features = self.transformer(features)
         features = rearrange(features, 'b t c -> t b c')
         features = features[1:] # remove global feature
+        
+        features_mask = torch.zeros_like(features)
+        features_mask[T-1:] = 1
+        features_mask = take_indexes(features_mask, backward_indexes[1:] - 1)
 
         patches = self.head(features)
+        
         mask = torch.zeros_like(patches)
         mask[T-1:] = 1
         mask = take_indexes(mask, backward_indexes[1:] - 1)
+
         img = self.patch2img(patches)
         mask = self.patch2img(mask)
 
-        return img, mask
+        return img, mask, features, features_mask
+
 
 class MAE_ViT(torch.nn.Module):
     def __init__(self,
@@ -139,8 +146,58 @@ class MAE_ViT(torch.nn.Module):
 
     def forward(self, img):
         features, backward_indexes = self.encoder(img)
-        predicted_img, mask = self.decoder(features,  backward_indexes)
+        predicted_img, mask, _ , _ = self.decoder(features,  backward_indexes)
         return predicted_img, mask
+
+
+class MAE_JEPA_ViT(torch.nn.Module):
+    def __init__(self,
+                 image_size=32,
+                 patch_size=2,
+                 emb_dim=192,
+                 encoder_layer=12,
+                 encoder_head=3,
+                 decoder_layer=4,
+                 decoder_head=3,
+                 mask_ratio=0.75,
+                 ) -> None:
+        super().__init__()
+
+        self.encoder = MAE_Encoder(image_size, patch_size, emb_dim, encoder_layer, encoder_head, mask_ratio)
+        self.target_encoder = MAE_Encoder(image_size, patch_size, emb_dim, encoder_layer, encoder_head, 0.0)
+        for param in self.target_encoder.parameters():
+            param.requires_grad = False
+
+        self.decoder = MAE_Decoder(image_size, patch_size, emb_dim, decoder_layer, decoder_head)
+        self.target_decoder = MAE_Decoder(image_size, patch_size, emb_dim, decoder_layer, decoder_head)
+
+    def forward(self, img):
+        features, backward_indexes = self.encoder(img) # masking 75%
+        target_features, target_backward_indexes = self.target_encoder(img) ## no masking
+        
+        # 256, 512, 196
+        target_features = target_features[1:,:,:] ## remove cls token
+
+        # 512, 3, 32, 32
+        predicted_img, mask, _ , _ = self.decoder(features,  backward_indexes) ## predict image
+        # print("predicted_img", predicted_img.shape)
+        # print("mask", mask.shape)
+
+        # 256, 512, 196
+        _, _, predicted_latent, mask_target = self.target_decoder(features,  backward_indexes)  ## predict latent
+        # print("predicted_latent", predicted_latent.shape)
+        # print("mask_target", mask_target.shape)
+
+        # print("target_features", target_features.shape)
+
+        return predicted_img, mask, predicted_latent, mask_target, target_features
+    
+    def update_target(self, m):
+        with torch.no_grad():
+            for param_q, param_k in zip(self.encoder.parameters(), self.target_encoder.parameters()):
+                param_k.data.mul_(m).add_((1.-m) * param_q.detach().data)
+
+
 
 class ViT_Classifier(torch.nn.Module):
     def __init__(self, encoder : MAE_Encoder, num_classes=10) -> None:
@@ -179,3 +236,5 @@ if __name__ == '__main__':
     print(predicted_img.shape)
     loss = torch.mean((predicted_img - img) ** 2 * mask / 0.75)
     print(loss)
+
+
