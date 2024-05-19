@@ -22,6 +22,9 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_epoch', type=int, default=200)
     parser.add_argument('--model_path', type=str, default='vit-t-mae.pt')
     parser.add_argument('--gpu', type=int, default=1)
+
+    os.makedirs('./maejepa_pretrained_model')
+
     args = parser.parse_args()
     
     setup_seed(args.seed)
@@ -112,5 +115,6 @@ if __name__ == '__main__':
             writer.add_image('mae_image', (img + 1) / 2, global_step=e)
         
         ''' save model '''
-        if e % save_frequency == 0 | e == args.total_epoch-1:
-            torch.save(model, args.model_path+"_epoch_"+str(e))
+        if e % save_frequency == 0 or e == args.total_epoch-1:
+            torch.save(model, './maejepa_pretrained_model/'+"epoch_"+str(e)+args.model_path)
+            
