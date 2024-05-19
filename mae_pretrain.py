@@ -14,15 +14,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--batch_size', type=int, default=4096)
-    parser.add_argument('--max_device_batch_size', type=int, default=512)
+    parser.add_argument('--max_device_batch_size', type=int, default=1024)
     parser.add_argument('--base_learning_rate', type=float, default=1.5e-4)
     parser.add_argument('--weight_decay', type=float, default=0.05)
     parser.add_argument('--mask_ratio', type=float, default=0.75)
     parser.add_argument('--total_epoch', type=int, default=2000)
     parser.add_argument('--warmup_epoch', type=int, default=200)
     parser.add_argument('--model_path', type=str, default='vit-t-mae.pt')
+    parser.add_argument('--gpu', type=int, default=0)
 
     args = parser.parse_args()
+
+    device = f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu'
+    if torch.cuda.is_available():
+        torch.cuda.set_device(args.gpu)
 
     setup_seed(args.seed)
 
@@ -41,6 +46,8 @@ if __name__ == '__main__':
     optim = torch.optim.AdamW(model.parameters(), lr=args.base_learning_rate * args.batch_size / 256, betas=(0.9, 0.95), weight_decay=args.weight_decay)
     lr_func = lambda epoch: min((epoch + 1) / (args.warmup_epoch + 1e-8), 0.5 * (math.cos(epoch / args.total_epoch * math.pi) + 1))
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_func, verbose=True)
+    
+    save_frequency = 100
 
     step_count = 0
     optim.zero_grad()
@@ -74,4 +81,5 @@ if __name__ == '__main__':
             writer.add_image('mae_image', (img + 1) / 2, global_step=e)
         
         ''' save model '''
-        torch.save(model, args.model_path)
+        if e % save_frequency == 0 | e == args.total_epoch-1:
+            torch.save(model, args.model_path+"_epoch_"+str(e))
