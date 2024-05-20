@@ -15,6 +15,9 @@ We mainly follow the implementation details in the paper. However, due to differ
 # pretrained with mae
 python mae_pretrain.py
 
+# pretrained with mae+jepa
+python mae_jepa_pretrain.py
+
 # train classifier from scratch
 python train_classifier.py
 
