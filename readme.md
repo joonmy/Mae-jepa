@@ -18,8 +18,12 @@ python mae_pretrain.py
 # train classifier from scratch
 python train_classifier.py
 
-# train classifier from pretrained model
-python train_classifier.py --pretrained_model_path vit-t-mae.pt --output_model_path vit-t-classifier-from_pretrained.pt
+# train classifier from pretrained model while freezing the encoder (linear probing)
+python train_classifier.py --pretrained_model_path "pretrained_model_path" --linear_probing
+
+# train classifier from pretrained model while not freezing the encoder (fine tuning)
+python train_classifier.py --pretrained_model_path "pretrained_model_path"
+
 ```
 
 See logs by `tensorboard --logdir logs`.
