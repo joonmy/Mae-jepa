@@ -21,9 +21,9 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_epoch', type=int, default=5)
     parser.add_argument('--pretrained_model_path', type=str, default=None)
     parser.add_argument('--output_model_path', type=str, default='vit-t-classifier-from_scratch.pt')
-
+    parser.add_argument('--linear_probing', action='store_true')
     args = parser.parse_args()
-
+    
     setup_seed(args.seed)
 
     batch_size = args.batch_size
@@ -38,13 +38,26 @@ if __name__ == '__main__':
     val_dataloader = torch.utils.data.DataLoader(val_dataset, load_batch_size, shuffle=False, num_workers=4)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+    model_name = args.pretrained_model_path.split('/')[-1]
+
     if args.pretrained_model_path is not None:
         model = torch.load(args.pretrained_model_path, map_location='cpu')
         writer = SummaryWriter(os.path.join('logs', 'cifar10', 'pretrain-cls'))
+        if args.linear_probing:
+            for param in model.encoder.parameters():
+                param.requires_grad = False
+            print(('./linear_probing_' + model_name))
+            args.output_model_path = ('./linear_probing_' + model_name)
+        else:
+            args.output_model_path = ('./fine_tuning_' + model_name)
     else:
         model = MAE_ViT()
         writer = SummaryWriter(os.path.join('logs', 'cifar10', 'scratch-cls'))
+        
     model = ViT_Classifier(model.encoder, num_classes=10).to(device)
+
+    # for param, name in zip(model.parameters(), model.state_dict().keys()):
+    #     print(name, param.requires_grad)
 
     loss_fn = torch.nn.CrossEntropyLoss()
     acc_fn = lambda logit, label: torch.mean((logit.argmax(dim=-1) == label).float())
@@ -99,5 +112,5 @@ if __name__ == '__main__':
             print(f'saving best model with acc {best_val_acc} at {e} epoch!')       
             torch.save(model, args.output_model_path)
 
-        writer.add_scalars('cls/loss', {'train' : avg_train_loss, 'val' : avg_val_loss}, global_step=e)
-        writer.add_scalars('cls/acc', {'train' : avg_train_acc, 'val' : avg_val_acc}, global_step=e)
+        writer.add_scalars('cls/loss', {'train_'+ model_name : avg_train_loss, 'val_'+ model_name : avg_val_loss}, global_step=e)
+        writer.add_scalars('cls/acc', {'train_'+ model_name : avg_train_acc, 'val_' + model_name : avg_val_acc}, global_step=e)
